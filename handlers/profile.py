@@ -10,9 +10,15 @@ from keyboards.profile_kb import get_education_keyboard, get_skip_keyboard
 
 router = Router()
 
-# Команда /profile
+# Команда /profile - начало заполнения профиля
 @router.message(Command("profile"))
 async def cmd_profile(message: Message, state: FSMContext):
+    # Проверяем, есть ли пользователь в базе
+    user = await db.get_user(message.from_user.id)
+    if not user:
+        await message.answer("Сначала запусти бота командой /start")
+        return
+    
     await message.answer(
         "🎮 <b>Давай соберём твоего профессионального аватара!</b>\n\n"
         "Каждый твой ответ — это +10 к характеристикам и новые бейджи!\n"
@@ -21,7 +27,7 @@ async def cmd_profile(message: Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove()  # Убираем главное меню на время заполнения
     )
     await state.set_state(ProfileState.name)
-    # Начислим XP за начало заполнения
+    # Начислим XP за начало заполнения!
     await db.add_xp_to_user(message.from_user.id, 10)
 
 # Обработчик состояния "name"
@@ -42,13 +48,12 @@ async def process_name(message: Message, state: FSMContext):
     )
     await state.set_state(ProfileState.about)
 
-
+# Обработчик состояния "about"
 @router.message(ProfileState.about, F.text)
 async def process_about(message: Message, state: FSMContext):
     # Сохраняем "о себе" в базу
     await db.update_user_profile(message.from_user.id, about=message.text)
     await db.add_xp_to_user(message.from_user.id, 15)
-    await db.add_badge_to_user(message.from_user.id, "profile_start")
     
     # Спрашиваем про уровень образования
     await message.answer(
@@ -57,7 +62,7 @@ async def process_about(message: Message, state: FSMContext):
         parse_mode="HTML",
         reply_markup=get_education_keyboard()  # Клавиатура с вариантами
     )
-    await state.set_state(ProfileState.education_level)  # Переходим к следующему состоянию
+    await state.set_state(ProfileState.education_level)
 
 # Обработчик для уровня образования
 @router.message(ProfileState.education_level, F.text)
@@ -67,7 +72,7 @@ async def process_education_level(message: Message, state: FSMContext):
     
     await message.answer(
         "Отлично! Где ты учился(лась)? Напиши название учебного заведения:",
-        reply_markup=ReplyKeyboardRemove()  # Убираем клаву
+        reply_markup=ReplyKeyboardRemove()  # Убираем спец. клавиатуру
     )
     await state.set_state(ProfileState.education_place)
 
@@ -92,16 +97,50 @@ async def process_career_goal(message: Message, state: FSMContext):
     await db.add_xp_to_user(message.from_user.id, 20)  # Больше XP за важный ответ!
     
     # Выдаем бейдж за заполнение профиля
-    await db.add_badge_to_user(message.from_user.id, "profile_done")
+    badge_awarded = await db.add_badge_to_user(message.from_user.id, "profile_done")
     
-    await state.clear() 
+    await state.clear()  # Важно: завершаем машину состояний
     
-    await message.answer(
+    success_message = (
         f"🔥 <b>Потрясающе! Ты прошел базовое заполнение профиля!</b>\n\n"
         f"Твоя цель: <i>{message.text}</i>\n"
         f"+20 XP за четкую цель!\n"
-        f"Ты получил бейдж 'Профилист'! 🏆\n\n"
-        f"Теперь используй команду /myprofile чтобы посмотреть свой профиль!",
+    )
+    
+    if badge_awarded:
+        success_message += "Ты получил бейдж 'Профилист'! 🏆\n\n"
+    
+    success_message += (
+        f"Теперь используй команду /myprofile чтобы посмотреть свой профиль!\n"
+        f"Или начни прокачивать навыки командой /skills"
+    )
+    
+    await message.answer(
+        success_message,
         parse_mode="HTML",
         reply_markup=get_main_keyboard()  # Возвращаем главное меню
     )
+
+# Обработчик для команды отмены заполнения профиля
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        await message.answer("Нечего отменять 🤷")
+        return
+    
+    await state.clear()
+    await message.answer(
+        "Заполнение профиля прервано.\n"
+        "Твои уже введенные данные сохранены!",
+        reply_markup=get_main_keyboard()
+    )
+
+# # Обработчик для любых сообщений не в том состоянии
+# @router.message(StateFilter(ProfileState))
+# async def process_unknown_message_in_profile(message: Message):
+#     await message.answer(
+#         "Пожалуйста, ответь на предыдущий вопрос 🙂\n"
+#         "Или используй /cancel чтобы прервать заполнение профиля"
+#     )
+

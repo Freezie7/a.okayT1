@@ -3,7 +3,15 @@ from aiogram.fsm.state import State, StatesGroup
 class ProfileState(StatesGroup):
     name = State()
     about = State()
-    # Добавляем новые поля
-    education_level = State()  # Уровень образования
-    education_place = State()  # Учебное заведение
-    career_goal = State()      # Карьерная цель
+    education_level = State()
+    education_place = State()
+    career_goal = State()
+    
+    # Состояния для навыков
+    choosing_skill_type = State()          # Выбор типа навыка
+    foreign_language = State()             # Иностранный язык
+    foreign_language_level = State()       # Уровень языка
+    programming_language = State()         # Язык программирования  
+    programming_language_level = State()   # Уровень языка программирования
+    other_skill = State()                  # Другой навык
+    other_skill_level = State()            # Уровень другого навыка
