@@ -9,7 +9,6 @@ router = Router()
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
-    # Регистрируем пользователя в базе, если его еще нет
     await db.create_user(message.from_user.id)
     
     await message.answer(
@@ -20,7 +19,8 @@ async def cmd_start(message: Message):
         "• Составить план развития\n"
         "• Прокачать навыки и получить бейджи!\n\n"
         "Начни с команды /profile чтобы заполнить свой профиль!",
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=get_main_keyboard()
     )
 
 @router.message(Command("help"))

@@ -95,6 +95,10 @@ def get_popular_skills_keyboard():
              InlineKeyboardButton(text="Аналитика", callback_data="skill_analysis")],
             [InlineKeyboardButton(text="Управление проектами", callback_data="skill_management"),
              InlineKeyboardButton(text="Маркетинг", callback_data="skill_marketing")],
+            [InlineKeyboardButton(text="Продажи", callback_data="skill_sales"),
+             InlineKeyboardButton(text="Креативность", callback_data="skill_creativity")],
+            [InlineKeyboardButton(text="Командная работа", callback_data="skill_teamwork"),
+             InlineKeyboardButton(text="Решение проблем", callback_data="skill_problem_solving")],
             [InlineKeyboardButton(text="Другой навык", callback_data="skill_other")]
         ]
     )

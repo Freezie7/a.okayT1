@@ -160,10 +160,19 @@ async def get_user_badges(user_id: int):
 async def add_user_language(user_id: int, language: str, level: str):
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    # Проверяем, есть ли уже такой язык у пользователя
+    cursor.execute('SELECT 1 FROM user_languages WHERE user_id = ? AND language = ?', 
+                  (user_id, language))
+    if cursor.fetchone():
+        conn.close()
+        return False  # Язык уже существует
+    
     cursor.execute('INSERT INTO user_languages (user_id, language, level) VALUES (?, ?, ?)', 
                   (user_id, language, level))
     conn.commit()
     conn.close()
+    return True
 
 async def get_user_languages(user_id: int):
     conn = get_db_connection()
@@ -185,10 +194,19 @@ async def delete_user_language(user_id: int, language: str):
 async def add_user_programming(user_id: int, language: str, level: str):
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    # Проверяем, есть ли уже такой язык у пользователя
+    cursor.execute('SELECT 1 FROM user_programming WHERE user_id = ? AND language = ?', 
+                  (user_id, language))
+    if cursor.fetchone():
+        conn.close()
+        return False  # Язык уже существует
+    
     cursor.execute('INSERT INTO user_programming (user_id, language, level) VALUES (?, ?, ?)', 
                   (user_id, language, level))
     conn.commit()
     conn.close()
+    return True
 
 async def get_user_programming(user_id: int):
     conn = get_db_connection()
@@ -210,10 +228,19 @@ async def delete_user_programming(user_id: int, language: str):
 async def add_user_skill(user_id: int, skill: str, level: str):
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    # Проверяем, есть ли уже такой навык у пользователя
+    cursor.execute('SELECT 1 FROM user_skills WHERE user_id = ? AND skill = ?', 
+                  (user_id, skill))
+    if cursor.fetchone():
+        conn.close()
+        return False  # Навык уже существует
+    
     cursor.execute('INSERT INTO user_skills (user_id, skill, level) VALUES (?, ?, ?)', 
                   (user_id, skill, level))
     conn.commit()
     conn.close()
+    return True
 
 async def get_user_skills(user_id: int):
     conn = get_db_connection()
