@@ -5,6 +5,7 @@ from aiogram.fsm.storage.memory import MemoryStorage  # Хранилище со�
 import config
 from handlers.start import router as start_router
 from handlers.profile import router as profile_router
+from handlers.view_profile import router as view_profile_router
 
 async def on_startup():
     print("✅ БОТ УСПЕШНО ЗАПУЩЕН")
@@ -14,7 +15,7 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())  # Добавляем хранилище для FSM
     
     # Подключаем роутеры (обработчики)
-    routers = [start_router, profile_router]
+    routers = [start_router, profile_router, view_profile_router]
     for router in routers:
         dp.include_router(router)
     

@@ -32,6 +32,15 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users (user_id)
     )
     ''')
+
+    # ALTER TABLE добавляет новые колонки, если они еще не существуют
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN education_level TEXT')
+        cursor.execute('ALTER TABLE users ADD COLUMN education_place TEXT')
+        cursor.execute('ALTER TABLE users ADD COLUMN career_goal TEXT')
+    except sqlite3.OperationalError:
+        # Колонки уже существуют
+        pass
     
     conn.commit()
     conn.close()

@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from states.profile_st import ProfileState
 from database import db
 from keyboards.main_kb import get_main_keyboard
+from keyboards.profile_kb import get_education_keyboard, get_skip_keyboard
 
 router = Router()
 
@@ -41,24 +42,66 @@ async def process_name(message: Message, state: FSMContext):
     )
     await state.set_state(ProfileState.about)
 
-# Обработчик состояния "about"
+
 @router.message(ProfileState.about, F.text)
 async def process_about(message: Message, state: FSMContext):
     # Сохраняем "о себе" в базу
     await db.update_user_profile(message.from_user.id, about=message.text)
-    
-    # Начисляем XP за ввод информации о себе
     await db.add_xp_to_user(message.from_user.id, 15)
-    
-    # Выдаем бейдж "Первый шаг"
     await db.add_badge_to_user(message.from_user.id, "profile_start")
     
-    # Завершаем машину состояний (пока только для этих двух полей)
-    await state.clear()
+    # Спрашиваем про уровень образования
+    await message.answer(
+        "📚 <b>Расскажи про свое образование</b>\n\n"
+        "Какой у тебя уровень образования?",
+        parse_mode="HTML",
+        reply_markup=get_education_keyboard()  # Клавиатура с вариантами
+    )
+    await state.set_state(ProfileState.education_level)  # Переходим к следующему состоянию
+
+# Обработчик для уровня образования
+@router.message(ProfileState.education_level, F.text)
+async def process_education_level(message: Message, state: FSMContext):
+    await db.update_user_profile(message.from_user.id, education_level=message.text)
+    await db.add_xp_to_user(message.from_user.id, 10)
     
     await message.answer(
-        "Супер! Ты создал основу своего профиля! +15 XP! 🚀\n"
-        "Ты получил бейдж 'Первый шаг'! 🏅\n\n"
-        "Теперь у тебя есть доступ к полному функционалу!",
+        "Отлично! Где ты учился(лась)? Напиши название учебного заведения:",
+        reply_markup=ReplyKeyboardRemove()  # Убираем клаву
+    )
+    await state.set_state(ProfileState.education_place)
+
+# Обработчик для учебного заведения
+@router.message(ProfileState.education_place, F.text)
+async def process_education_place(message: Message, state: FSMContext):
+    await db.update_user_profile(message.from_user.id, education_place=message.text)
+    await db.add_xp_to_user(message.from_user.id, 10)
+    
+    await message.answer(
+        "🎯 <b>Теперь самое интересное!</b>\n\n"
+        "Кем ты хочешь стать в компании через 3 года?\n"
+        "Напиши название желаемой должности:",
+        parse_mode="HTML"
+    )
+    await state.set_state(ProfileState.career_goal)
+
+# Обработчик для карьерной цели (ФИНАЛЬНЫЙ шаг цепочки)
+@router.message(ProfileState.career_goal, F.text)
+async def process_career_goal(message: Message, state: FSMContext):
+    await db.update_user_profile(message.from_user.id, career_goal=message.text)
+    await db.add_xp_to_user(message.from_user.id, 20)  # Больше XP за важный ответ!
+    
+    # Выдаем бейдж за заполнение профиля
+    await db.add_badge_to_user(message.from_user.id, "profile_done")
+    
+    await state.clear() 
+    
+    await message.answer(
+        f"🔥 <b>Потрясающе! Ты прошел базовое заполнение профиля!</b>\n\n"
+        f"Твоя цель: <i>{message.text}</i>\n"
+        f"+20 XP за четкую цель!\n"
+        f"Ты получил бейдж 'Профилист'! 🏆\n\n"
+        f"Теперь используй команду /myprofile чтобы посмотреть свой профиль!",
+        parse_mode="HTML",
         reply_markup=get_main_keyboard()  # Возвращаем главное меню
     )
