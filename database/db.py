@@ -71,6 +71,19 @@ def init_db():
     )
     ''')
     
+    # Таблица для вакансий (HR)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS hr_vacancies (
+        id INTEGER PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        required_skills TEXT NOT NULL,
+        created_by INTEGER NOT NULL,
+        status TEXT DEFAULT 'open',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -257,6 +270,135 @@ async def delete_user_skill(user_id: int, skill: str):
     conn.commit()
     conn.close()
 
+# ===== ФУНКЦИИ ДЛЯ РАБОТЫ С ВАКАНСИЯМИ (HR) =====
+
+async def add_vacancy(title: str, description: str, required_skills: str, created_by: int):
+    """Добавить вакансию с указанием требуемых навыков"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        'INSERT INTO hr_vacancies (title, description, required_skills, created_by, status) VALUES (?, ?, ?, ?, ?)',
+        (title, description, required_skills, created_by, 'open')
+    )
+    conn.commit()
+    vacancy_id = cursor.lastrowid
+    conn.close()
+    return vacancy_id
+
+async def get_vacancy(vacancy_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM hr_vacancies WHERE id = ?', (vacancy_id,))
+    vacancy = cursor.fetchone()
+    conn.close()
+    return dict(vacancy) if vacancy else None
+
+async def get_active_vacancies():
+    """Получить все активные вакансии"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM hr_vacancies WHERE status = "open" ORDER BY created_at DESC')
+    vacancies = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return vacancies
+
+async def get_vacancy(vacancy_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM hr_vacancies WHERE id = ?', (vacancy_id,))
+    vacancy = cursor.fetchone()
+    conn.close()
+    return dict(vacancy) if vacancy else None
+
+async def close_vacancy(vacancy_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE hr_vacancies SET status = "closed" WHERE id = ?', (vacancy_id,))
+    conn.commit()
+    conn.close()
+
+# ===== ФУНКЦИИ ПОИСКА СОТРУДНИКОВ =====
+
+async def search_employees_by_skills(skills: list):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if not skills:
+        return []
+    
+    placeholders = ','.join('?' * len(skills))
+    query = f'''
+    SELECT DISTINCT u.user_id, u.name, u.about, u.career_goal, u.xp,
+           GROUP_CONCAT(DISTINCT ul.language) as languages,
+           GROUP_CONCAT(DISTINCT up.language) as programming,
+           GROUP_CONCAT(DISTINCT us.skill) as other_skills
+    FROM users u
+    LEFT JOIN user_languages ul ON u.user_id = ul.user_id
+    LEFT JOIN user_programming up ON u.user_id = up.user_id
+    LEFT JOIN user_skills us ON u.user_id = us.user_id
+    WHERE ul.language IN ({placeholders}) 
+       OR up.language IN ({placeholders})
+       OR us.skill IN ({placeholders})
+    GROUP BY u.user_id
+    LIMIT 10
+    '''
+    
+    cursor.execute(query, skills * 3)
+    employees = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return employees
+
+async def search_employees_for_vacancy(vacancy_id: int):
+    """Поиск сотрудников подходящих для конкретной вакансии"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Получаем вакансию
+    vacancy = await get_vacancy(vacancy_id)
+    if not vacancy:
+        return []
+    
+    # Анализируем описание вакансии чтобы выявить ключевые навыки
+    description = vacancy['description'].lower()
+    skills_to_search = []
+    
+    # Простой анализ текста для выявления навыков
+    programming_keywords = ['python', 'javascript', 'java', 'c++', 'c#', 'php', 'sql', 'html', 'css', 'react', 'vue', 'angular', 'node', 'django', 'flask']
+    language_keywords = ['английский', 'english', 'немецкий', 'german', 'французский', 'french', 'китайский', 'chinese']
+    skill_keywords = ['управление', 'management', 'лидерство', 'leadership', 'коммуникация', 'communication', 'аналитика', 'analysis']
+    
+    for keyword in programming_keywords + language_keywords + skill_keywords:
+        if keyword in description:
+            skills_to_search.append(keyword)
+    
+    if not skills_to_search:
+        return []
+    
+    # Ищем сотрудников с этими навыками
+    placeholders = ','.join('?' * len(skills_to_search))
+    query = f'''
+    SELECT DISTINCT u.user_id, u.name, u.xp, u.career_goal,
+           (SELECT COUNT(*) FROM user_languages WHERE user_id = u.user_id AND language IN ({placeholders})) as lang_match,
+           (SELECT COUNT(*) FROM user_programming WHERE user_id = u.user_id AND language IN ({placeholders})) as prog_match,
+           (SELECT COUNT(*) FROM user_skills WHERE user_id = u.user_id AND skill IN ({placeholders})) as skill_match
+    FROM users u
+    WHERE u.name IS NOT NULL
+    HAVING (lang_match + prog_match + skill_match) > 0
+    ORDER BY (lang_match + prog_match + skill_match) DESC
+    LIMIT 10
+    '''
+    
+    cursor.execute(query, skills_to_search * 3)
+    employees = [dict(row) for row in cursor.fetchall()]
+    
+    # Добавляем информацию о проценте совпадения
+    for emp in employees:
+        total_matches = emp['lang_match'] + emp['prog_match'] + emp['skill_match']
+        emp['match_percentage'] = min(100, total_matches * 20)  # Простая формула
+    
+    conn.close()
+    return employees
+
 # ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 
 async def get_all_users():
@@ -264,28 +406,6 @@ async def get_all_users():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT user_id, name, xp FROM users ORDER BY xp DESC')
-    users = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return users
-
-async def search_users_by_skill(skill: str):
-    """Поиск пользователей по навыку (для HR)"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Ищем в языках, программировании и навыках
-    query = '''
-    SELECT u.user_id, u.name, u.xp 
-    FROM users u
-    LEFT JOIN user_languages ul ON u.user_id = ul.user_id
-    LEFT JOIN user_programming up ON u.user_id = up.user_id  
-    LEFT JOIN user_skills us ON u.user_id = us.user_id
-    WHERE ul.language LIKE ? OR up.language LIKE ? OR us.skill LIKE ?
-    GROUP BY u.user_id
-    '''
-    
-    search_pattern = f'%{skill}%'
-    cursor.execute(query, (search_pattern, search_pattern, search_pattern))
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return users
@@ -323,3 +443,82 @@ async def get_user_stats(user_id: int):
         'badges_count': badges_count,
         'total_skills': languages_count + programming_count + skills_count
     }
+
+async def get_users_count():
+    """Получить количество всех пользователей"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) as count FROM users')
+    result = cursor.fetchone()
+    conn.close()
+    return result['count'] if result else 0
+
+async def get_users_with_names_count():
+    """Получить количество пользователей с заполненными именами"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) as count FROM users WHERE name IS NOT NULL')
+    result = cursor.fetchone()
+    conn.close()
+    return result['count'] if result else 0
+
+async def get_active_users_count():
+    """Получить количество активных пользователей (с XP > 0)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) as count FROM users WHERE xp > 0 AND name IS NOT NULL')
+    result = cursor.fetchone()
+    conn.close()
+    return result['count'] if result else 0
+
+async def get_total_skills_count():
+    """Получить общее количество навыков"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT COUNT(*) as count FROM user_languages')
+    lang_count = cursor.fetchone()['count'] or 0
+    
+    cursor.execute('SELECT COUNT(*) as count FROM user_programming')
+    prog_count = cursor.fetchone()['count'] or 0
+    
+    cursor.execute('SELECT COUNT(*) as count FROM user_skills')
+    skills_count = cursor.fetchone()['count'] or 0
+    
+    conn.close()
+    return lang_count + prog_count + skills_count
+
+async def debug_get_all_users():
+    """Отладочная функция - получить всех пользователей"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users')
+    users = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return users
+
+def migrate_db():
+    """Миграция базы данных - добавляем колонку required_skills если её нет"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Проверяем есть ли колонка required_skills
+        cursor.execute("PRAGMA table_info(hr_vacancies)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'required_skills' not in columns:
+            print("🔄 Добавляем колонку required_skills в таблицу hr_vacancies...")
+            cursor.execute('ALTER TABLE hr_vacancies ADD COLUMN required_skills TEXT DEFAULT ""')
+            conn.commit()
+            print("✅ Колонка required_skills добавлена!")
+        else:
+            print("✅ Колонка required_skills уже существует")
+            
+    except Exception as e:
+        print(f"❌ Ошибка миграции: {e}")
+    finally:
+        conn.close()
+
+# Вызываем миграцию при импорте
+migrate_db()

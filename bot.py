@@ -8,6 +8,8 @@ from handlers.profile import router as profile_router
 from handlers.view_profile import router as view_profile_router
 from handlers.skills import router as skills_router
 from handlers.main_commands import router as main_router  # Добавляем новый роутер
+from handlers.career import router as career_router
+from handlers.vacancies import router as vacancies_router
 
 async def on_startup():
     print("✅ БОТ УСПЕШНО ЗАПУЩЕН")
@@ -22,6 +24,8 @@ async def main():
         profile_router, 
         view_profile_router,
         skills_router,
+        career_router,
+        vacancies_router,  # Должен быть здесь!
         main_router
     ]
     
