@@ -7,6 +7,7 @@ from handlers_hr.start_hr import router as start_router  # Добавляем и
 from handlers_hr.vacancies_hr import router as vacancies_router
 from handlers_hr.search import router as search_router
 from handlers_hr.analytics import router as analytics_router
+from handlers_hr.coupons import router as coupons_router
 
 async def on_startup():
     print("✅ HR-БОТ УСПЕШНО ЗАПУЩЕН")
@@ -21,7 +22,8 @@ async def main():
         start_router,      # Добавляем start роутер
         vacancies_router,
         search_router, 
-        analytics_router
+        analytics_router,
+        coupons_router
     ]
     
     for router in routers:

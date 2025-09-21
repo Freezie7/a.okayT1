@@ -83,6 +83,35 @@ def init_db():
     )
     ''')
     
+    # Таблица партнерских купонов
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS partner_coupons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        partner_name TEXT NOT NULL,
+        coupon_name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        xp_cost INTEGER NOT NULL,
+        total_quantity INTEGER DEFAULT 100,
+        remaining_quantity INTEGER DEFAULT 100,
+        is_active BOOLEAN DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    # Таблица покупок купонов пользователями
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS user_coupons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        coupon_id INTEGER,
+        purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_used BOOLEAN DEFAULT 0,
+        used_date TIMESTAMP NULL,
+        FOREIGN KEY (user_id) REFERENCES users (user_id),
+        FOREIGN KEY (coupon_id) REFERENCES partner_coupons (id)
+    )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -301,14 +330,6 @@ async def get_active_vacancies():
     conn.close()
     return vacancies
 
-async def get_vacancy(vacancy_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM hr_vacancies WHERE id = ?', (vacancy_id,))
-    vacancy = cursor.fetchone()
-    conn.close()
-    return dict(vacancy) if vacancy else None
-
 async def close_vacancy(vacancy_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -495,6 +516,278 @@ async def debug_get_all_users():
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return users
+
+# ===== ФУНКЦИИ ДЛЯ РАБОТЫ С КУПОНАМИ =====
+
+async def init_coupons_table():
+    """Инициализация таблицы купонов"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Добавляем начальные данные купонов
+        initial_coupons = [
+            ('OZON', 'Подарочный сертификат 500₽', 'Подарочный сертификат на 500 рублей в OZON', 100, 50),
+            ('OZON', 'Подарочный сертификат 1000₽', 'Подарочный сертификат на 1000 рублей в OZON', 200, 30),
+            ('DNS', 'Скидка 15% на технику', 'Скидка 15% на любую технику в DNS', 150, 40),
+            ('DNS', 'Скидка 25% на комплектующие', 'Скидка 25% на комплектующие ПК в DNS', 250, 20),
+            ('ЛитРес', 'Книга в подарок', 'Выбор любой книги из каталога ЛитРес', 80, 100),
+            ('ЛитРес', 'Подписка на 1 месяц', 'Подписка ЛитРес на 1 месяц', 120, 80),
+            ('Кофейня', 'Кофе и десерт', 'Кофе и десерт в партнерской кофейне', 50, 200),
+            ('Кофейня', 'Завтрак', 'Полноценный завтрак в кофейне', 100, 100),
+            ('Яндекс.Маркет', 'Скидка 10% на заказ', 'Скидка 10% на любой заказ', 120, 60),
+            ('Яндекс.Еда', 'Бесплатная доставка', 'Бесплатная доставка на 1 месяц', 90, 150)
+        ]
+
+        # Проверяем, нужно ли добавлять купоны
+        cursor.execute("SELECT COUNT(*) FROM partner_coupons")
+        count_result = cursor.fetchone()
+        coupon_count = count_result[0] if count_result else 0
+        
+        if coupon_count == 0:
+            print("🔄 Добавляем начальные купоны в базу данных...")
+            for coupon in initial_coupons:
+                cursor.execute('''
+                INSERT INTO partner_coupons (partner_name, coupon_name, description, xp_cost, total_quantity, remaining_quantity)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ''', (coupon[0], coupon[1], coupon[2], coupon[3], coupon[4], coupon[4]))
+            print(f"✅ Добавлено {len(initial_coupons)} купонов!")
+
+        conn.commit()
+        conn.close()
+
+    except Exception as e:
+        print(f"❌ Ошибка инициализации таблицы купонов: {e}")
+
+async def get_available_coupons():
+    """Получить все доступные купоны"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+        SELECT id, partner_name, coupon_name, description, xp_cost, remaining_quantity 
+        FROM partner_coupons 
+        WHERE is_active = 1 AND remaining_quantity > 0
+        ORDER BY partner_name, xp_cost
+        ''')
+
+        coupons = cursor.fetchall()
+        conn.close()
+
+        return [{
+            'id': row[0],
+            'partner': row[1],
+            'name': row[2],
+            'description': row[3],
+            'xp_cost': row[4],
+            'remaining': row[5]
+        } for row in coupons]
+
+    except Exception as e:
+        print(f"Error getting available coupons: {e}")
+        return []
+
+async def purchase_coupon(user_id: int, coupon_id: int):
+    """Покупка купона пользователем"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Получаем информацию о купоне
+        cursor.execute('''
+        SELECT xp_cost, remaining_quantity FROM partner_coupons 
+        WHERE id = ? AND is_active = 1 AND remaining_quantity > 0
+        ''', (coupon_id,))
+
+        coupon = cursor.fetchone()
+        if not coupon:
+            conn.close()
+            return None, "Купон недоступен"
+
+        xp_cost, remaining = coupon['xp_cost'], coupon['remaining_quantity']
+
+        # Проверяем XP пользователя
+        cursor.execute("SELECT xp FROM users WHERE user_id = ?", (user_id,))
+        user_xp_result = cursor.fetchone()
+        user_xp = user_xp_result['xp'] if user_xp_result else 0
+
+        if user_xp < xp_cost:
+            conn.close()
+            return None, f"Недостаточно XP. Нужно: {xp_cost}, у вас: {user_xp}"
+
+        # Списание XP
+        cursor.execute("UPDATE users SET xp = xp - ? WHERE user_id = ?", (xp_cost, user_id))
+
+        # Уменьшаем количество купонов
+        cursor.execute('''
+        UPDATE partner_coupons 
+        SET remaining_quantity = remaining_quantity - 1 
+        WHERE id = ?
+        ''', (coupon_id,))
+
+        # Добавляем запись о покупке
+        cursor.execute('''
+        INSERT INTO user_coupons (user_id, coupon_id) 
+        VALUES (?, ?)
+        ''', (user_id, coupon_id))
+
+        conn.commit()
+        conn.close()
+
+        return {
+            'xp_cost': xp_cost,
+            'remaining_xp': user_xp - xp_cost
+        }, None
+
+    except Exception as e:
+        print(f"Error purchasing coupon: {e}")
+        return None, "Ошибка при покупке"
+
+async def get_user_coupons(user_id: int):
+    """Получить купоны пользователя"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+        SELECT uc.id, p.partner_name, p.coupon_name, p.description, 
+               uc.purchase_date, uc.is_used, uc.used_date
+        FROM user_coupons uc
+        JOIN partner_coupons p ON uc.coupon_id = p.id
+        WHERE uc.user_id = ?
+        ORDER BY uc.purchase_date DESC
+        ''', (user_id,))
+
+        coupons = cursor.fetchall()
+        conn.close()
+
+        return [{
+            'id': row[0],
+            'partner': row[1],
+            'name': row[2],
+            'description': row[3],
+            'purchase_date': row[4],
+            'is_used': bool(row[5]),
+            'used_date': row[6]
+        } for row in coupons]
+
+    except Exception as e:
+        print(f"Error getting user coupons: {e}")
+        return []
+
+async def get_all_coupons():
+    """Получить все купоны"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, partner_name, coupon_name, description, xp_cost, 
+               remaining_quantity, total_quantity, is_active
+        FROM partner_coupons 
+        ORDER BY partner_name, coupon_name
+    ''')
+    coupons = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return coupons
+
+async def get_coupon(coupon_id: int):
+    """Получить купон по ID"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM partner_coupons WHERE id = ?', (coupon_id,))
+    coupon = cursor.fetchone()
+    conn.close()
+    return dict(coupon) if coupon else None
+
+async def update_coupon_quantity(coupon_id: int, new_quantity: int):
+    """Обновить количество оставшихся купонов"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE partner_coupons SET remaining_quantity = ? WHERE id = ?',
+                   (new_quantity, coupon_id))
+    conn.commit()
+    conn.close()
+    return True
+
+async def increase_coupon_quantity(coupon_id: int, amount: int = 1):
+    """Увеличить количество доступных купонов (только remaining_quantity)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Проверяем существование купона
+    cursor.execute('SELECT total_quantity FROM partner_coupons WHERE id = ?', (coupon_id,))
+    coupon = cursor.fetchone()
+
+    if not coupon:
+        conn.close()
+        return None
+
+    # Увеличиваем только remaining_quantity
+    cursor.execute('''
+        UPDATE partner_coupons 
+        SET remaining_quantity = remaining_quantity + ?
+        WHERE id = ?
+    ''', (amount, coupon_id))
+    conn.commit()
+
+    # Получаем обновленное количество
+    cursor.execute('SELECT remaining_quantity, total_quantity FROM partner_coupons WHERE id = ?', (coupon_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return dict(result) if result else None
+
+async def decrease_coupon_quantity(coupon_id: int, amount: int = 1):
+    """Уменьшить количество доступных купонов (только remaining_quantity)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Проверяем, достаточно ли купонов
+    cursor.execute('SELECT remaining_quantity, total_quantity FROM partner_coupons WHERE id = ?', (coupon_id,))
+    current = cursor.fetchone()
+
+    if not current or current['remaining_quantity'] < amount:
+        conn.close()
+        return None
+
+    # Уменьшаем только remaining_quantity
+    cursor.execute('''
+        UPDATE partner_coupons 
+        SET remaining_quantity = remaining_quantity - ?
+        WHERE id = ?
+    ''', (amount, coupon_id))
+    conn.commit()
+
+    # Получаем обновленное количество
+    cursor.execute('SELECT remaining_quantity, total_quantity FROM partner_coupons WHERE id = ?', (coupon_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return dict(result) if result else None
+
+async def set_coupon_quantity(coupon_id: int, new_quantity: int):
+    """Установить точное количество available купонов (не превышая total_quantity)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Получаем максимальное возможное количество
+    cursor.execute('SELECT total_quantity FROM partner_coupons WHERE id = ?', (coupon_id,))
+    total = cursor.fetchone()
+
+    if not total:
+        conn.close()
+        return None
+
+    # Не позволяем установить больше чем total_quantity
+    final_quantity = min(new_quantity, total['total_quantity'])
+
+    cursor.execute('UPDATE partner_coupons SET remaining_quantity = ? WHERE id = ?',
+                   (final_quantity, coupon_id))
+    conn.commit()
+
+    # Получаем обновленное количество
+    cursor.execute('SELECT remaining_quantity, total_quantity FROM partner_coupons WHERE id = ?', (coupon_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return dict(result) if result else None
 
 def migrate_db():
     """Миграция базы данных - добавляем колонку required_skills если её нет"""

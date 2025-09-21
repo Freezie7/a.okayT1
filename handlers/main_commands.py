@@ -86,6 +86,12 @@ async def show_help(message: Message):
     )
     await message.answer(help_text, parse_mode="HTML", reply_markup=get_main_keyboard())
 
+@router.message(F.text == "🎁 Магазин купонов")
+async def coupons_shop_button(message: Message):
+    """Обработчик кнопки магазина купонов"""
+    from handlers.coupons import show_available_coupons
+    await show_available_coupons(message)
+
 # Обработчик для любого неизвестного сообщения
 @router.message()
 async def unknown_message(message: Message):

@@ -10,11 +10,14 @@ from handlers.skills import router as skills_router
 from handlers.main_commands import router as main_router  # Добавляем новый роутер
 from handlers.career import router as career_router
 from handlers.vacancies import router as vacancies_router
+from handlers.coupons import router as coupons_router
+from database import db
 
 async def on_startup():
     print("✅ БОТ УСПЕШНО ЗАПУЩЕН")
 
 async def main():
+    await db.init_coupons_table()
     bot = Bot(token=config.TOKEN_BOT)
     dp = Dispatcher(storage=MemoryStorage())
     
@@ -26,7 +29,8 @@ async def main():
         skills_router,
         career_router,
         vacancies_router,  # Должен быть здесь!
-        main_router
+        main_router,
+        coupons_router
     ]
     
     for router in routers:

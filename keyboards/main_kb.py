@@ -5,7 +5,8 @@ def get_main_keyboard():
         keyboard=[
             [KeyboardButton(text="📊 Мой профиль"), KeyboardButton(text="🎯 Мой карьерный план")],
             [KeyboardButton(text="🔧 Прокачать навыки"), KeyboardButton(text="🏆 Мои достижения")],
-            [KeyboardButton(text="💼 Вакансии внутри компании")]
+            [KeyboardButton(text="💼 Вакансии внутри компании")],
+            [KeyboardButton(text="🎁 Магазин купонов")]
         ],
         resize_keyboard=True,
         input_field_placeholder="Выберите действие..."
