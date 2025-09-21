@@ -5,7 +5,7 @@ def get_hr_keyboard():
         keyboard=[
             [KeyboardButton(text="📝 Добавить вакансию"), KeyboardButton(text="🔍 Найти сотрудников")],
             [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="📋 Список вакансий")],
-            [KeyboardButton(text="📈 Аналитика навыков"), KeyboardButton(text="🎫 Управление купонами")]
+            [KeyboardButton(text="🎫 Управление купонами")]
         ],
         resize_keyboard=True,
         input_field_placeholder="Выберите действие..."
