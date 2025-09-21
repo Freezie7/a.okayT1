@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 
@@ -7,6 +7,7 @@ from states_hr import CouponState
 from database_utils import db
 
 from keyboards_hr import get_hr_keyboard, get_cancel_keyboard, get_coupons_management_keyboard
+
 router = Router()
 
 
@@ -22,11 +23,14 @@ async def manage_coupons(message: Message):
         reply_markup=get_coupons_management_keyboard()
     )
 
-    await message.answer(
-        "🎫 <b>Управление партнерскими купонами</b>\n\n"
-        "Выберите действие:",
-        parse_mode="HTML",
-        reply_markup=keyboard
+
+@router.message(F.text == "🔙 Назад")
+async def back_to_main_menu(message: Message, state: FSMContext):
+    """Вернуться в главное меню"""
+    await state.clear()
+    await message.answer("🔙 Назад",
+
+    reply_markup=get_hr_keyboard()
     )
 
 
@@ -43,10 +47,8 @@ async def coupons_status(message: Message):
         response = "📊 <b>Статус купонов:</b>\n\n"
 
         for coupon in coupons:
-            status_emoji = "🟢" if coupon['remaining_quantity'] > 10 else "🟡" if coupon[
-                                                                                    'remaining_quantity'] > 0 else "🔴"
-            percent = (coupon['remaining_quantity'] / coupon['total_quantity']) * 100 if coupon[
-                                                                                             'total_quantity'] > 0 else 0
+            status_emoji = "🟢" if coupon['remaining_quantity'] > 10 else "🟡" if coupon['remaining_quantity'] > 0 else "🔴"
+            percent = (coupon['remaining_quantity'] / coupon['total_quantity']) * 100 if coupon['total_quantity'] > 0 else 0
             response += f"{status_emoji} <b>{coupon['partner_name']}</b> - {coupon['coupon_name']}\n"
             response += f"   Осталось: {coupon['remaining_quantity']}/{coupon['total_quantity']} ({percent:.1f}%)\n\n"
 
@@ -91,7 +93,7 @@ async def add_coupons_start(message: Message, state: FSMContext):
         "Введите ID купона и количество через пробел:\n"
         "Например: <code>5 10</code> - добавить 10 купонов к ID 5\n"
         "Максимальное количество не изменится!\n\n"
-        "Или введите <code>❌ Отмена</code> для выхода",
+        "Или введите ❌ Отмена для выхода",
         parse_mode="HTML",
         reply_markup=get_cancel_keyboard()
     )
@@ -101,9 +103,9 @@ async def add_coupons_start(message: Message, state: FSMContext):
 @router.message(CouponState.add_quantity, F.text)
 async def add_coupons_process(message: Message, state: FSMContext):
     """Обработка добавления купонов"""
-    if message.text.lower() == "❌ отмена":
+    if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Отменено", reply_markup=get_hr_keyboard())
+        await message.answer("❌ Отменено", reply_markup=get_coupons_management_keyboard())
         return
 
     try:
@@ -146,7 +148,7 @@ async def add_coupons_process(message: Message, state: FSMContext):
             f"🏪 {coupon['partner_name']} - {coupon['coupon_name']}\n"
             f"📦 Теперь: {result['remaining_quantity']}/{coupon['total_quantity']}\n"
             f"📊 Максимум: {coupon['total_quantity']}",
-            reply_markup=get_hr_keyboard()
+            reply_markup=get_coupons_management_keyboard()
         )
 
         await state.clear()
@@ -164,7 +166,7 @@ async def decrease_coupons_start(message: Message, state: FSMContext):
         "Введите ID купона и количество через пробел:\n"
         "Например: <code>5 5</code> - уменьшить на 5 купонов ID 5\n"
         "Максимальное количество останется прежним!\n\n"
-        "Или введите <code>отмена</code> для выхода",
+        "Или введите ❌ Отмена для выхода",
         parse_mode="HTML",
         reply_markup=get_cancel_keyboard()
     )
@@ -174,9 +176,9 @@ async def decrease_coupons_start(message: Message, state: FSMContext):
 @router.message(CouponState.decrease_quantity, F.text)
 async def decrease_coupons_process(message: Message, state: FSMContext):
     """Обработка уменьшения купонов"""
-    if message.text.lower() == "отмена":
+    if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Отменено", reply_markup=get_hr_keyboard())
+        await message.answer("❌ Отменено", reply_markup=get_coupons_management_keyboard())
         return
 
     try:
@@ -204,7 +206,7 @@ async def decrease_coupons_process(message: Message, state: FSMContext):
             f"🏪 {coupon['partner_name']} - {coupon['coupon_name']}\n"
             f"📦 Осталось: {result['remaining_quantity']}/{coupon['total_quantity']}\n"
             f"📊 Максимум: {coupon['total_quantity']}",
-            reply_markup=get_hr_keyboard()
+            reply_markup=get_coupons_management_keyboard()
         )
 
         await state.clear()
@@ -247,7 +249,8 @@ async def set_coupon_command(message: Message):
             f"✅ Установлено количество: {quantity}\n"
             f"🏪 {coupon['partner_name']} - {coupon['coupon_name']}\n"
             f"📦 Теперь: {result['remaining_quantity']}/{coupon['total_quantity']}\n"
-            f"📊 Максимум: {coupon['total_quantity']}"
+            f"📊 Максимум: {coupon['total_quantity']}",
+            reply_markup=get_coupons_management_keyboard()
         )
 
     except ValueError:
@@ -271,9 +274,9 @@ async def create_coupon_start(message: Message, state: FSMContext):
 @router.message(CouponState.create_coupon_partner, F.text)
 async def process_coupon_partner(message: Message, state: FSMContext):
     """Обработка названия партнера"""
-    if message.text.lower() == "отмена":
+    if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Отменено", reply_markup=get_hr_keyboard())
+        await message.answer("❌ Отменено", reply_markup=get_coupons_management_keyboard())
         return
 
     await state.update_data(partner_name=message.text)
@@ -288,9 +291,9 @@ async def process_coupon_partner(message: Message, state: FSMContext):
 @router.message(CouponState.create_coupon_name, F.text)
 async def process_coupon_name(message: Message, state: FSMContext):
     """Обработка названия купона"""
-    if message.text.lower() == "отмена":
+    if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Отменено", reply_markup=get_hr_keyboard())
+        await message.answer("❌ Отменено", reply_markup=get_coupons_management_keyboard())
         return
 
     await state.update_data(coupon_name=message.text)
@@ -305,9 +308,9 @@ async def process_coupon_name(message: Message, state: FSMContext):
 @router.message(CouponState.create_coupon_description, F.text)
 async def process_coupon_description(message: Message, state: FSMContext):
     """Обработка описания купона"""
-    if message.text.lower() == "отмена":
+    if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Отменено", reply_markup=get_hr_keyboard())
+        await message.answer("❌ Отменено", reply_markup=get_coupons_management_keyboard())
         return
 
     await state.update_data(description=message.text)
@@ -322,9 +325,9 @@ async def process_coupon_description(message: Message, state: FSMContext):
 @router.message(CouponState.create_coupon_xp_cost, F.text)
 async def process_coupon_xp_cost(message: Message, state: FSMContext):
     """Обработка стоимости купона"""
-    if message.text.lower() == "отмена":
+    if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Отменено", reply_markup=get_hr_keyboard())
+        await message.answer("❌ Отменено", reply_markup=get_coupons_management_keyboard())
         return
 
     try:
@@ -348,9 +351,9 @@ async def process_coupon_xp_cost(message: Message, state: FSMContext):
 @router.message(CouponState.create_coupon_quantity, F.text)
 async def process_coupon_quantity(message: Message, state: FSMContext):
     """Обработка количества купонов"""
-    if message.text.lower() == "отмена":
+    if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Отменено", reply_markup=get_hr_keyboard())
+        await message.answer("❌ Отменено", reply_markup=get_coupons_management_keyboard())
         return
 
     data = await state.get_data()
@@ -371,7 +374,7 @@ async def process_coupon_quantity(message: Message, state: FSMContext):
         )
 
         if error:
-            await message.answer(f"❌ {error}", reply_markup=get_hr_keyboard())
+            await message.answer(f"❌ {error}", reply_markup=get_coupons_management_keyboard())
             await state.clear()
             return
 
@@ -384,7 +387,7 @@ async def process_coupon_quantity(message: Message, state: FSMContext):
             f"📦 <b>Количество:</b> {quantity}\n"
             f"🆔 <b>ID купона:</b> {coupon_id}",
             parse_mode="HTML",
-            reply_markup=get_hr_keyboard()
+            reply_markup=get_coupons_management_keyboard()
         )
 
         await state.clear()
@@ -408,9 +411,9 @@ async def delete_coupon_start(message: Message, state: FSMContext):
 @router.message(CouponState.delete_coupon, F.text)
 async def process_delete_coupon(message: Message, state: FSMContext):
     """Обработка удаления купона"""
-    if message.text.lower() == "отмена":
+    if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Отменено", reply_markup=get_hr_keyboard())
+        await message.answer("❌ Отменено", reply_markup=get_coupons_management_keyboard())
         return
 
     try:
@@ -419,7 +422,7 @@ async def process_delete_coupon(message: Message, state: FSMContext):
         # Получаем информацию о купоне
         coupon = await db.get_coupon(coupon_id)
         if not coupon:
-            await message.answer("❌ Купон с таким ID не найден", reply_markup=get_hr_keyboard())
+            await message.answer("❌ Купон с таким ID не найден", reply_markup=get_coupons_management_keyboard())
             await state.clear()
             return
 
@@ -427,24 +430,17 @@ async def process_delete_coupon(message: Message, state: FSMContext):
         success, error = await db.delete_coupon(coupon_id)
 
         if error:
-            await message.answer(f"❌ {error}", reply_markup=get_hr_keyboard())
+            await message.answer(f"❌ {error}", reply_markup=get_coupons_management_keyboard())
         else:
             await message.answer(
                 f"✅ <b>Купон успешно удален!</b>\n\n"
                 f"🏪 {coupon['partner_name']} - {coupon['coupon_name']}\n"
                 f"🆔 ID: {coupon_id}",
                 parse_mode="HTML",
-                reply_markup=get_hr_keyboard()
+                reply_markup=get_coupons_management_keyboard()
             )
 
         await state.clear()
 
     except ValueError:
         await message.answer("❌ Введите числовой ID купона")
-
-
-
-
-
-
-

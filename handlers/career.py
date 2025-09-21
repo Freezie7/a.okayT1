@@ -53,7 +53,7 @@ async def generate_career_plan(message: Message):
         # Формируем данные для ИИ
         user_data = {
             "name": user['name'],
-            "about": user['about'],
+            "about": " ",
             "education_level": user['education_level'],
             "education_place": user['education_place'],
             "career_goal": user['career_goal'],

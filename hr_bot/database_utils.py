@@ -267,16 +267,143 @@ class DBWrapper:
         conn.close()
 
     async def search_employees_by_skills_simple(self, skills):
-        """Простой поиск сотрудников по навыкам"""
+        """Поиск сотрудников со ВСЕМИ указанными навыками"""
         conn = get_db_connection()
         cursor = conn.cursor()
 
         if not skills:
             return None
 
-        response = "🔍 Результаты поиска:\n\n"
-        found_any = False
+        # Создаем условия для поиска по каждому навыку
+        conditions = []
+        params = []
 
+        for skill in skills:
+            conditions.append('''
+            (EXISTS (SELECT 1 FROM user_languages WHERE user_id = u.user_id AND language LIKE ?) OR
+            EXISTS (SELECT 1 FROM user_programming WHERE user_id = u.user_id AND language LIKE ?) OR
+            EXISTS (SELECT 1 FROM user_skills WHERE user_id = u.user_id AND skill LIKE ?))
+            ''')
+            search_term = f"%{skill}%"
+            params.extend([search_term, search_term, search_term])
+
+        # Основной запрос для поиска сотрудников со ВСЕМИ навыками
+        query = f'''
+        SELECT 
+            u.user_id, 
+            u.name, 
+            u.xp,
+            u.career_goal
+        FROM users u
+        WHERE u.name IS NOT NULL 
+        AND {' AND '.join(conditions)}
+        ORDER BY u.xp DESC
+        LIMIT 10
+        '''
+
+        cursor.execute(query, params)
+        employees = cursor.fetchall()
+
+        conn.close()
+
+        if not employees:
+            # Если не найдено сотрудников со всеми навыками, ищем с группировкой по комбинациям
+            return await self.search_grouped_partial_matches(skills)
+
+        # Формируем ответ для полных совпадений
+        response = f"✅ Найдены сотрудники со ВСЕМИ навыками: {', '.join(skills)}\n\n"
+        
+        for emp in employees:
+            response += f"• {emp['name']} ({emp['xp']} XP)"
+            response += "\n"
+
+        return response
+
+    async def search_grouped_partial_matches(self, skills):
+        """Поиск сотрудников с группировкой по комбинациям навыков без дубликатов"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        response = f"⚠️ Сотрудников со ВСЕМИ навыками ({', '.join(skills)}) не найдено\n\n"
+        response += "🔍 Частичные совпадения:\n\n"
+        
+        # Создаем все возможные комбинации навыков (от больших к меньшим)
+        from itertools import combinations
+        all_combinations = []
+        
+        # Генерируем комбинации от самых больших к самым маленьким
+        for r in range(len(skills), 1, -1):  # Начинаем с 2+ навыков
+            for combo in combinations(skills, r):
+                all_combinations.append(combo)
+        
+        found_employees = set()  # Множество для отслеживания уже найденных сотрудников
+        found_any = False
+        
+        # Ищем сотрудников для каждой комбинации навыков
+        for combo in all_combinations:
+            conditions = []
+            params = []
+            
+            for skill in combo:
+                conditions.append('''
+                (EXISTS (SELECT 1 FROM user_languages WHERE user_id = u.user_id AND language LIKE ?) OR
+                EXISTS (SELECT 1 FROM user_programming WHERE user_id = u.user_id AND language LIKE ?) OR
+                EXISTS (SELECT 1 FROM user_skills WHERE user_id = u.user_id AND skill LIKE ?))
+                ''')
+                search_term = f"%{skill}%"
+                params.extend([search_term, search_term, search_term])
+            
+            query = f'''
+            SELECT 
+                u.user_id, 
+                u.name, 
+                u.xp,
+                u.career_goal
+            FROM users u
+            WHERE u.name IS NOT NULL 
+            AND {' AND '.join(conditions)}
+            ORDER BY u.xp DESC
+            LIMIT 10
+            '''
+            
+            cursor.execute(query, params)
+            employees = cursor.fetchall()
+            
+            if employees:
+                # Фильтруем сотрудников, которые еще не были найдены в более полных комбинациях
+                new_employees = []
+                for emp in employees:
+                    emp_id = emp['user_id']
+                    if emp_id not in found_employees:
+                        new_employees.append(emp)
+                        found_employees.add(emp_id)
+                
+                if new_employees:
+                    found_any = True
+                    response += f"📊 {', '.join(combo)}:\n"
+                    for emp in new_employees:
+                        response += f"• {emp['name']} ({emp['xp']} XP)"
+                        response += "\n"
+                    response += "\n"
+        
+        conn.close()
+
+        if not found_any:
+            # Если не найдено групповых совпадений, ищем одиночные навыки
+            return await self.search_single_skills(skills)
+
+        return response
+
+    async def search_single_skills(self, skills):
+        """Поиск по одиночным навыкам (если нет групповых совпадений)"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        response = f"⚠️ Сотрудников со ВСЕМИ навыками ({', '.join(skills)}) не найдено\n\n"
+        response += "🔍 Совпадения по отдельным навыкам:\n\n"
+        
+        found_any = False
+        
         for skill in skills:
             query = '''
             SELECT u.user_id, u.name, u.xp 
@@ -286,7 +413,8 @@ class DBWrapper:
                 EXISTS (SELECT 1 FROM user_programming WHERE user_id = u.user_id AND language LIKE ?) OR
                 EXISTS (SELECT 1 FROM user_skills WHERE user_id = u.user_id AND skill LIKE ?)
             )
-            LIMIT 5
+            ORDER BY u.xp DESC
+            LIMIT 3
             '''
 
             search_term = f"%{skill}%"
@@ -299,7 +427,7 @@ class DBWrapper:
                 for emp in employees:
                     response += f"• {emp['name']} ({emp['xp']} XP)\n"
                 response += "\n"
-
+        
         conn.close()
 
         if not found_any:
