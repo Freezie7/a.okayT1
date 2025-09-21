@@ -25,7 +25,6 @@ async def cmd_view_profile(message: Message):
     # Проверяем, заполнен ли базовый профиль
     is_profile_complete = all([
         user['name'], 
-        user['about'], 
         user['education_level'], 
         user['education_place'],
         user['career_goal']
@@ -55,7 +54,6 @@ async def cmd_view_profile(message: Message):
     profile_text = (
         f"👤 <b>Твой профиль:</b>\n\n"
         f"<b>Имя:</b> {user['name'] or 'Не указано'}\n"
-        f"<b>О себе:</b> {user['about'] or 'Не указано'}\n"
         f"<b>Образование:</b> {user['education_level'] or 'Не указано'} ({user['education_place'] or 'Не указано'})\n"
         f"<b>Цель:</b> {user['career_goal'] or 'Не указано'}"
         f"{skills_text}"

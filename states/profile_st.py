@@ -2,7 +2,6 @@ from aiogram.fsm.state import State, StatesGroup
 
 class ProfileState(StatesGroup):
     name = State()
-    about = State()
     education_level = State()
     education_place = State()
     career_goal = State()

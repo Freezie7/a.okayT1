@@ -20,7 +20,6 @@ def init_db():
         id INTEGER PRIMARY KEY,
         user_id INTEGER UNIQUE NOT NULL,
         name TEXT,
-        about TEXT,
         education_level TEXT,
         education_place TEXT,
         career_goal TEXT,
@@ -328,7 +327,7 @@ async def search_employees_by_skills(skills: list):
     
     placeholders = ','.join('?' * len(skills))
     query = f'''
-    SELECT DISTINCT u.user_id, u.name, u.about, u.career_goal, u.xp,
+    SELECT DISTINCT u.user_id, u.name, u.career_goal, u.xp,
            GROUP_CONCAT(DISTINCT ul.language) as languages,
            GROUP_CONCAT(DISTINCT up.language) as programming,
            GROUP_CONCAT(DISTINCT us.skill) as other_skills

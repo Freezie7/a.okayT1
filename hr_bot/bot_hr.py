@@ -3,8 +3,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 import config_hr
-from handlers_hr.start import router as start_router  # Добавляем импорт
-from handlers_hr.vacancies import router as vacancies_router
+from handlers_hr.start_hr import router as start_router  # Добавляем импорт
+from handlers_hr.vacancies_hr import router as vacancies_router
 from handlers_hr.search import router as search_router
 from handlers_hr.analytics import router as analytics_router
 

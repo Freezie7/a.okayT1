@@ -124,34 +124,34 @@ async def process_vacancy_skills(message: Message, state: FSMContext):
     await message.answer(success_message, parse_mode="Markdown", reply_markup=get_hr_keyboard())
     await state.clear()
     
-    # ===== ТОЧНО ТАКАЯ ЖЕ ПРОВЕРКА КАК В SEARCH.PY =====
-    skills = message.text.split()
+    # # ===== ТОЧНО ТАКАЯ ЖЕ ПРОВЕРКА КАК В SEARCH.PY =====
+    # skills = message.text.split()
 
-    await message.answer(f"🔍 Ищу сотрудников с навыками: {', '.join(skills)}...")
+    # await message.answer(f"🔍 Ищу сотрудников с навыками: {', '.join(skills)}...")
 
-    try:
-        # Используем простой поиск (точно такой же как в search.py)
-        user_ids = await db.search_employees_by_skills_simple2(skills)  # Получаем список user_id
+    # try:
+    #     # Используем простой поиск (точно такой же как в search.py)
+    #     user_ids = await db.search_employees_by_skills_simple2(skills)  # Получаем список user_id
 
-        if not user_ids:
-            search_result_message = "❌ Сотрудники с такими навыками не найдены"
-        else:
-            # Формируем сообщение для пользователя (опционально, можно убрать, если не нужно)
-            search_result_message = "✅ Сотрудники найдены"
-            print(map(str, user_ids));
+    #     if not user_ids:
+    #         search_result_message = "❌ Сотрудники с такими навыками не найдены"
+    #     else:
+    #         # Формируем сообщение для пользователя (опционально, можно убрать, если не нужно)
+    #         search_result_message = "✅ Сотрудники найдены"
+    #         print(map(str, user_ids));
 
-        await message.answer(search_result_message, reply_markup=get_hr_keyboard())
+    #     await message.answer(search_result_message, reply_markup=get_hr_keyboard())
 
-    except Exception as e:
-        await message.answer(f"❌ Ошибка поиска: {str(e)}", reply_markup=get_hr_keyboard())
+    # except Exception as e:
+    #     await message.answer(f"❌ Ошибка поиска: {str(e)}", reply_markup=get_hr_keyboard())
 
-    # Отправляем уведомления подходящим сотрудникам в фоновом режиме
-    notified_count = await notify_matching_employees(vacancy_name, vacancy_id, user_ids) #
+    # # Отправляем уведомления подходящим сотрудникам в фоновом режиме
+    # notified_count = await notify_matching_employees(vacancy_name, vacancy_id, user_ids) #
     
-    if notified_count > 0:
-        await message.answer(f"📨 Отправлено уведомлений: {notified_count} сотрудникам")
-    else:
-        await message.answer("ℹ️ Не было отправлено ни одного уведомления")
+    # if notified_count > 0:
+    #     await message.answer(f"📨 Отправлено уведомлений: {notified_count} сотрудникам")
+    # else:
+    #     await message.answer("ℹ️ Не было отправлено ни одного уведомления")
 
 @router.message(Command("vacancies"))
 @router.message(F.text == "📋 Список вакансий")

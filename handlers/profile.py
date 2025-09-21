@@ -40,23 +40,9 @@ async def process_name(message: Message, state: FSMContext):
     # Начисляем XP за ввод имени
     await db.add_xp_to_user(message.from_user.id, 10)
     
+    # Пропускаем шаг "about" и сразу переходим к образованию
     await message.answer(
         f"Отлично, {message.text}! +10 XP к харизме! 🎉\n\n"
-        "Теперь расскажи о себе кратко (2-3 предложения):\n"
-        "<i>Чем занимаешься, что нравится, какие у тебя интересы...</i>",
-        parse_mode="HTML"
-    )
-    await state.set_state(ProfileState.about)
-
-# Обработчик состояния "about"
-@router.message(ProfileState.about, F.text)
-async def process_about(message: Message, state: FSMContext):
-    # Сохраняем "о себе" в базу
-    await db.update_user_profile(message.from_user.id, about=message.text)
-    await db.add_xp_to_user(message.from_user.id, 15)
-    
-    # Спрашиваем про уровень образования
-    await message.answer(
         "📚 <b>Расскажи про свое образование</b>\n\n"
         "Какой у тебя уровень образования?",
         parse_mode="HTML",
@@ -135,12 +121,3 @@ async def cmd_cancel(message: Message, state: FSMContext):
         "Твои уже введенные данные сохранены!",
         reply_markup=get_main_keyboard()
     )
-
-# # Обработчик для любых сообщений не в том состоянии
-# @router.message(StateFilter(ProfileState))
-# async def process_unknown_message_in_profile(message: Message):
-#     await message.answer(
-#         "Пожалуйста, ответь на предыдущий вопрос 🙂\n"
-#         "Или используй /cancel чтобы прервать заполнение профиля"
-#     )
-
